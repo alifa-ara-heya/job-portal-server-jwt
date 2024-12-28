@@ -106,6 +106,9 @@ async function run() {
             const search = req.query?.search;
             const min = req.query?.min;
             const max = req.query?.max;
+            const page = parseInt(req.query?.page) || 1; // Default to page 1 if not provided
+            const limit = parseInt(req.query?.limit) || 1; // Default to 5 items per page if not provided
+            const skip = (page - 1) * limit; // Calculate the number of items to skip
 
             let query = {};
             let sortQuery = {};
@@ -115,7 +118,7 @@ async function run() {
             }
 
             if (sort == 'true') {
-                sortQuery = { 'salaryRange.min': -1 } //will give the highest paying jobs
+                sortQuery = { 'salaryRange.min': -1 } //highest paying jobs
             }
 
             if (search) {
@@ -131,10 +134,24 @@ async function run() {
                 }
             }
 
+            //count total jobs for pagination metadata
+            const totalJobs = await jobsCollection.countDocuments(query)
+
             console.log('query', query.location);
-            const cursor = jobsCollection.find(query).sort(sortQuery);
+
+            const cursor = jobsCollection
+                .find(query)
+                .sort(sortQuery)
+                .skip(skip) // Skip items for the current page
+                .limit(limit); // Limit the number of items per page
+
             const result = await cursor.toArray();
-            res.send(result);
+            res.send({
+                jobs: result,
+                totalJobs, // Total number of matching jobs
+                totalPages: Math.ceil(totalJobs / limit), //total pages
+                currentPage: page
+            });
         });
 
         app.get('/jobs/:id', async (req, res) => {
